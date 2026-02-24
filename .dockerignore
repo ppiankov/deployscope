@@ -1,0 +1,10 @@
+bin/
+.git/
+.github/
+.claude/
+*.md
+!go.mod
+!go.sum
+Makefile
+deploy/
+coverage.out

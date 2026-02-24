@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployscope
+  namespace: monitoring
+  labels:
+    app: deployscope
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: deployscope
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: deployscope
+    spec:
+      serviceAccountName: deployscope
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        runAsNonRoot: true
+      containers:
+        - name: deployscope
+          image: ghcr.io/ppiankov/deployscope:latest
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: deployscope
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: deployscope
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
