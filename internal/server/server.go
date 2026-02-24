@@ -179,7 +179,9 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-API-Version", APIVersion)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding services response: %v", err)
+	}
 }
 
 func (s *Server) handleServiceByID(w http.ResponseWriter, r *http.Request) {
@@ -219,7 +221,9 @@ func (s *Server) handleServiceByID(w http.ResponseWriter, r *http.Request) {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-API-Version", APIVersion)
-			json.NewEncoder(w).Encode(response)
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				log.Printf("Error encoding service response: %v", err)
+			}
 			return
 		}
 	}
@@ -253,7 +257,9 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-API-Version", APIVersion)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding summary response: %v", err)
+	}
 }
 
 func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
@@ -300,18 +306,22 @@ func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-API-Version", APIVersion)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding namespaces response: %v", err)
+	}
 }
 
 func (s *Server) handleSpec(w http.ResponseWriter, r *http.Request) {
 	spec := getOpenAPISpec(r)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(spec)
+	if err := json.NewEncoder(w).Encode(spec); err != nil {
+		log.Printf("Error encoding spec response: %v", err)
+	}
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "OK")
+	_, _ = fmt.Fprint(w, "OK")
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
@@ -321,12 +331,12 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "Ready")
+	_, _ = fmt.Fprint(w, "Ready")
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, getHTMLPage())
+	_, _ = fmt.Fprint(w, getHTMLPage())
 }
 
 func sendError(w http.ResponseWriter, statusCode int, code, message, details string) {
@@ -346,7 +356,9 @@ func sendError(w http.ResponseWriter, statusCode int, code, message, details str
 		},
 	}
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding error response: %v", err)
+	}
 }
 
 func filterServices(services []k8s.ServiceStatus, filters map[string]string) []k8s.ServiceStatus {
