@@ -17,7 +17,7 @@ lint: ## Run golangci-lint
 
 fmt: ## Format code
 	gofmt -w .
-	goimports -w .
+	go run golang.org/x/tools/cmd/goimports@latest -w .
 
 deps: ## Download dependencies
 	go mod download
