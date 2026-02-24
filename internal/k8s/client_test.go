@@ -31,7 +31,7 @@ func newFakeDeployment(name, namespace, version string, replicas, ready int32) *
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						{Image: "registry.example.com/" + name + ":" + version},
+						{Image: "ghcr.io/example/" + name + ":" + version},
 					},
 				},
 			},
