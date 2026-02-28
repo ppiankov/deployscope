@@ -1,1 +1,4 @@
+bin/
+*.exe
+coverage.out
 
