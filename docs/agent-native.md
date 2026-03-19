@@ -123,11 +123,30 @@ DeployScope doesn't work alone. It occupies a specific position in the stack:
 | Layer | Tool | What It Does |
 |-------|------|-------------|
 | **Cognitive** | DeployScope | Reads K8s state + annotations, tells agents what exists, what's healthy, who owns it, where to go |
+| **Diagnostic** | [Kubenow](https://github.com/ppiankov/kubenow) | Answers *why* things are broken — OOMKilled, CrashLoop, ImagePullBackOff, resource skew, events |
 | **Enforcement** | [Chainwatch](https://github.com/ppiankov/chainwatch) | Runtime control plane — allows/denies agent actions at execution boundaries |
 | **Redaction** | [Pastewatch](https://github.com/ppiankov/pastewatch) | Secret detection — ensures sensitive data never leaves the machine |
 | **Investigation** | [Nullbot](https://github.com/ppiankov/chainwatch) | LLM-driven observer under chainwatch enforcement — generates structured findings |
 
+DeployScope answers *what* is broken and *where to go*. Kubenow answers *why* it's broken. An agent runs `deployscope status` first, then `kubenow monitor` to investigate the red services. Two tools, each doing one thing well.
+
 DeployScope is the **first contact** — the tool an agent uses before it does anything else. It answers: "What is this cluster? Is it healthy? Who owns what? Where do I go to fix things?"
+
+## Scope: All Workloads That Matter
+
+DeployScope monitors all stateful workload types — not just Deployments:
+
+- **Deployments** — application services
+- **StatefulSets** — databases, queues, anything with persistent identity
+- **DaemonSets** — logging agents, monitoring agents, node-level infrastructure
+
+Each type has its own health logic (replica semantics differ), but the same annotation conventions and JSON schema apply to all. If auth-service depends on postgres-platform and postgres is a StatefulSet, deployscope sees both.
+
+Jobs and CronJobs are out of scope — they're ephemeral with a different lifecycle.
+
+## Cluster Discovery Is Out of Scope
+
+DeployScope answers questions about *this* cluster. In a multi-cluster organization, discovering which clusters exist is a different tool's job — a lightweight registry or inventory service. DeployScope runs per-cluster and reports what it sees.
 
 ## Design Principles
 
@@ -157,6 +176,24 @@ This hasn't changed. DeployScope does not:
 
 Run `deployscope init` to generate:
 1. A `deployscope.yaml` config file with cluster identity
-2. An example annotation YAML that teams can apply to their deployments
+2. Example annotation snippets for Helm values, Kustomize patches, and raw YAML
+
+### The Right Way: Helm Chart Level
+
+Annotations should live in your Helm chart values — not applied manually. Every service deployed through your org's common chart gets annotations automatically:
+
+```yaml
+# values.yaml
+deployscope:
+  owner: "team-platform"
+  tier: "critical"
+  gitopsRepo: "github.com/org/infra"
+  gitopsPath: "clusters/prod/auth/"
+  oncall: "#platform-oncall"
+```
+
+Your chart template translates these into `deployscope.dev/*` annotations. This way every new service gets annotations at deploy time, and agent-readiness scales with adoption of the chart — not manual effort.
+
+For services outside the common chart, annotate manually or via Kustomize patches. The important thing is that annotations are part of the deployment pipeline, not an afterthought.
 
 Start with `owner` and `tier` — those two annotations alone let agents distinguish "page someone" from "log it." Add `gitops-repo` and `gitops-path` when you're ready for the full autonomous pipeline.

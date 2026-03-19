@@ -147,8 +147,8 @@ See [docs/agent-native.md](docs/agent-native.md) for the full vision and archite
 
 ## Known limitations
 
-- Deployments only (not StatefulSets, DaemonSets)
-- Single cluster only
+- Deployments only — StatefulSets and DaemonSets support planned ([WO-5](docs/agent-native.md#scope-all-workloads-that-matter))
+- Single cluster only — cluster discovery is a separate tool
 - In-memory cache (data refreshes on restart)
 - No API authentication
 
