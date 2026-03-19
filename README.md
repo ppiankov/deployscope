@@ -148,4 +148,4 @@ Only deployments with label `app.kubernetes.io/version` are monitored.
 
 ## License
 
-MIT
+[MIT](LICENSE)
