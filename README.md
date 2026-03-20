@@ -143,7 +143,8 @@ Only deployments with label `app.kubernetes.io/version` are monitored.
 
 DeployScope is becoming the cognitive layer for autonomous Kubernetes operations — the first tool an agent uses to understand a cluster. One binary, one command, full situational awareness: what's running, what's healthy, who owns it, and where to go next.
 
-See [docs/agent-native.md](docs/agent-native.md) for the full vision and architecture.
+- [docs/SKILL.md](docs/SKILL.md) — machine-readable spec for agents ([ANCC](https://ancc.dev) convention)
+- [docs/agent-native.md](docs/agent-native.md) — vision and architecture
 
 ## Known limitations
 
