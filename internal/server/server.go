@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ppiankov/deployscope/internal/k8s"
+	"github.com/ppiankov/deployscope/internal/metrics"
 )
 
 const (
@@ -97,6 +98,8 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/services", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/api/v1/services", http.StatusMovedPermanently)
 	})
+
+	mux.Handle("/metrics", metrics.Handler())
 }
 
 func (s *Server) setCORS(w http.ResponseWriter) {
@@ -127,6 +130,7 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metrics.UpdateWorkloadMetrics(services, summary)
 	cached := s.k8s.IsCached()
 
 	query := r.URL.Query()

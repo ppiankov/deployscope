@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/ppiankov/deployscope/internal/k8s"
+	"github.com/ppiankov/deployscope/internal/metrics"
 	"github.com/ppiankov/deployscope/internal/server"
 )
 
@@ -28,6 +29,8 @@ func main() {
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
 
+	handler := metrics.Middleware(mux)
+
 	log.Printf("deployscope v%s starting on port %s", version, port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
