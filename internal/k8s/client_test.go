@@ -314,6 +314,73 @@ func TestCacheConcurrency(t *testing.T) {
 	wg.Wait()
 }
 
+func TestIgnoreAnnotation(t *testing.T) {
+	visible := newFakeDeployment("visible", "prod", "1.0.0", 1, 1)
+	ignored := newFakeDeployment("ignored", "prod", "1.0.0", 1, 1)
+	ignored.Annotations = map[string]string{"deployscope.dev/ignore": "true"}
+
+	cs := fake.NewSimpleClientset(visible, ignored)
+	client := NewClientWith(cs)
+
+	services, summary, err := client.FetchDeployments(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(services) != 1 {
+		t.Fatalf("expected 1 service (ignored skipped), got %d", len(services))
+	}
+	if services[0].Name != "visible" {
+		t.Errorf("expected visible, got %s", services[0].Name)
+	}
+	if summary.Total != 1 {
+		t.Errorf("expected total=1, got %d", summary.Total)
+	}
+}
+
+func TestAnnotationExtraction(t *testing.T) {
+	dep := newFakeDeployment("svc", "prod", "1.0.0", 3, 3)
+	dep.Annotations = map[string]string{
+		"deployscope.dev/owner":       "team-platform",
+		"deployscope.dev/tier":        "critical",
+		"deployscope.dev/oncall":      "#platform-oncall",
+		"deployscope.dev/depends-on":  "postgres,redis",
+		"deployscope.dev/gitops-repo": "github.com/org/infra",
+	}
+	dep.Spec.Template.Labels["app.kubernetes.io/managed-by"] = "argocd"
+
+	cs := fake.NewSimpleClientset(dep)
+	client := NewClientWith(cs)
+
+	services, _, err := client.FetchDeployments(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(services))
+	}
+
+	svc := services[0]
+	if svc.Owner == nil || *svc.Owner != "team-platform" {
+		t.Errorf("expected owner=team-platform, got %v", svc.Owner)
+	}
+	if svc.Tier == nil || *svc.Tier != "critical" {
+		t.Errorf("expected tier=critical, got %v", svc.Tier)
+	}
+	if svc.ManagedBy == nil || *svc.ManagedBy != "argocd" {
+		t.Errorf("expected managed_by=argocd, got %v", svc.ManagedBy)
+	}
+	if len(svc.DependsOn) != 2 || svc.DependsOn[0] != "postgres" || svc.DependsOn[1] != "redis" {
+		t.Errorf("expected depends_on=[postgres,redis], got %v", svc.DependsOn)
+	}
+	if svc.Integration.GitOpsRepo == nil || *svc.Integration.GitOpsRepo != "github.com/org/infra" {
+		t.Errorf("expected gitops_repo, got %v", svc.Integration.GitOpsRepo)
+	}
+	if svc.Integration.Oncall == nil || *svc.Integration.Oncall != "#platform-oncall" {
+		t.Errorf("expected oncall=#platform-oncall, got %v", svc.Integration.Oncall)
+	}
+}
+
 func TestComputeStatus(t *testing.T) {
 	tests := []struct {
 		ready, desired int32

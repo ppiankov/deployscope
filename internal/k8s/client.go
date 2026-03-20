@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +15,18 @@ import (
 )
 
 const CacheDuration = 30 * time.Second
+
+// Integration holds deployscope.dev annotation pointers.
+type Integration struct {
+	GitOpsRepo *string `json:"gitops_repo"`
+	GitOpsPath *string `json:"gitops_path"`
+	Oncall     *string `json:"oncall"`
+	Runbook    *string `json:"runbook"`
+	Dashboard  *string `json:"dashboard"`
+	HealthURL  *string `json:"health_endpoint"`
+	DeepHealth *string `json:"deep_health"`
+	DeepDetail *string `json:"deep_health_detail"`
+}
 
 // ServiceStatus represents a single Kubernetes workload's status.
 type ServiceStatus struct {
@@ -27,6 +40,12 @@ type ServiceStatus struct {
 	ReadyReplicas int32             `json:"ready_replicas"`
 	Status        string            `json:"status"`
 	Labels        map[string]string `json:"labels,omitempty"`
+	Owner         *string           `json:"owner"`
+	Tier          *string           `json:"tier"`
+	ManagedBy     *string           `json:"managed_by"`
+	PartOf        *string           `json:"part_of"`
+	DependsOn     []string          `json:"depends_on"`
+	Integration   Integration       `json:"integration"`
 	CreatedAt     time.Time         `json:"created_at"`
 	UpdatedAt     time.Time         `json:"updated_at"`
 }
@@ -96,6 +115,12 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 			continue
 		}
 
+		allAnnotations := mergeAnnotations(dep.Annotations, dep.Spec.Template.Annotations)
+		owner, tier, managedBy, partOf, dependsOn, integration, ignored := extractAnnotations(allAnnotations, dep.Spec.Template.Labels)
+		if ignored {
+			continue
+		}
+
 		image := ""
 		if len(dep.Spec.Template.Spec.Containers) > 0 {
 			image = dep.Spec.Template.Spec.Containers[0].Image
@@ -124,6 +149,12 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 			ReadyReplicas: ready,
 			Status:        status,
 			Labels:        dep.Spec.Template.Labels,
+			Owner:         owner,
+			Tier:          tier,
+			ManagedBy:     managedBy,
+			PartOf:        partOf,
+			DependsOn:     dependsOn,
+			Integration:   integration,
 			CreatedAt:     dep.CreationTimestamp.Time,
 			UpdatedAt:     time.Now(),
 		})
@@ -137,6 +168,12 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 		for _, ss := range statefulSets.Items {
 			version := ss.Spec.Template.Labels["app.kubernetes.io/version"]
 			if version == "" {
+				continue
+			}
+
+			allAnnotations := mergeAnnotations(ss.Annotations, ss.Spec.Template.Annotations)
+			owner, tier, managedBy, partOf, dependsOn, integration, ignored := extractAnnotations(allAnnotations, ss.Spec.Template.Labels)
+			if ignored {
 				continue
 			}
 
@@ -165,6 +202,12 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 				ReadyReplicas: ready,
 				Status:        status,
 				Labels:        ss.Spec.Template.Labels,
+				Owner:         owner,
+				Tier:          tier,
+				ManagedBy:     managedBy,
+				PartOf:        partOf,
+				DependsOn:     dependsOn,
+				Integration:   integration,
 				CreatedAt:     ss.CreationTimestamp.Time,
 				UpdatedAt:     time.Now(),
 			})
@@ -179,6 +222,12 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 		for _, ds := range daemonSets.Items {
 			version := ds.Spec.Template.Labels["app.kubernetes.io/version"]
 			if version == "" {
+				continue
+			}
+
+			allAnnotations := mergeAnnotations(ds.Annotations, ds.Spec.Template.Annotations)
+			owner, tier, managedBy, partOf, dependsOn, integration, ignored := extractAnnotations(allAnnotations, ds.Spec.Template.Labels)
+			if ignored {
 				continue
 			}
 
@@ -204,6 +253,12 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 				ReadyReplicas: ready,
 				Status:        status,
 				Labels:        ds.Spec.Template.Labels,
+				Owner:         owner,
+				Tier:          tier,
+				ManagedBy:     managedBy,
+				PartOf:        partOf,
+				DependsOn:     dependsOn,
+				Integration:   integration,
 				CreatedAt:     ds.CreationTimestamp.Time,
 				UpdatedAt:     time.Now(),
 			})
@@ -247,6 +302,58 @@ func addToSummary(summary *Summary, status string) {
 	case "red":
 		summary.Down++
 	}
+}
+
+const annotationPrefix = "deployscope.dev/"
+
+func mergeAnnotations(sets ...map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for _, s := range sets {
+		for k, v := range s {
+			merged[k] = v
+		}
+	}
+	return merged
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func extractAnnotations(annotations map[string]string, labels map[string]string) (owner, tier, managedBy, partOf *string, dependsOn []string, integration Integration, ignored bool) {
+	if annotations[annotationPrefix+"ignore"] == "true" {
+		ignored = true
+		return
+	}
+
+	owner = strPtr(annotations[annotationPrefix+"owner"])
+	tier = strPtr(annotations[annotationPrefix+"tier"])
+	managedBy = strPtr(labels["app.kubernetes.io/managed-by"])
+	partOf = strPtr(labels["app.kubernetes.io/part-of"])
+
+	if deps := annotations[annotationPrefix+"depends-on"]; deps != "" {
+		for _, d := range strings.Split(deps, ",") {
+			d = strings.TrimSpace(d)
+			if d != "" {
+				dependsOn = append(dependsOn, d)
+			}
+		}
+	}
+
+	integration = Integration{
+		GitOpsRepo: strPtr(annotations[annotationPrefix+"gitops-repo"]),
+		GitOpsPath: strPtr(annotations[annotationPrefix+"gitops-path"]),
+		Oncall:     strPtr(annotations[annotationPrefix+"oncall"]),
+		Runbook:    strPtr(annotations[annotationPrefix+"runbook"]),
+		Dashboard:  strPtr(annotations[annotationPrefix+"dashboard"]),
+		HealthURL:  strPtr(annotations[annotationPrefix+"health-endpoint"]),
+		DeepHealth: strPtr(annotations[annotationPrefix+"deep-health"]),
+		DeepDetail: strPtr(annotations[annotationPrefix+"deep-health-detail"]),
+	}
+	return
 }
 
 // CacheExpiry returns the current cache expiry time.
