@@ -16,7 +16,7 @@ import (
 func int32Ptr(i int32) *int32 { return &i }
 
 func newFakeDeployment(name, namespace, version string, replicas, ready int32) *appsv1.Deployment {
-	dep := &appsv1.Deployment{
+	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -40,7 +40,60 @@ func newFakeDeployment(name, namespace, version string, replicas, ready int32) *
 			ReadyReplicas: ready,
 		},
 	}
-	return dep
+}
+
+func newFakeStatefulSet(name, namespace, version string, replicas, ready int32) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: int32Ptr(replicas),
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app.kubernetes.io/version": version,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Image: "ghcr.io/example/" + name + ":" + version},
+					},
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas: ready,
+		},
+	}
+}
+
+func newFakeDaemonSet(name, namespace, version string, desired, ready int32) *appsv1.DaemonSet {
+	return &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app.kubernetes.io/version": version,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Image: "ghcr.io/example/" + name + ":" + version},
+					},
+				},
+			},
+		},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: desired,
+			NumberReady:            ready,
+		},
+	}
 }
 
 func TestFetchDeployments(t *testing.T) {
@@ -85,6 +138,13 @@ func TestFetchDeployments(t *testing.T) {
 	if services[2].Status != "green" {
 		t.Errorf("expected third service status=green, got %s", services[2].Status)
 	}
+
+	// All should have workload_type=deployment
+	for _, svc := range services {
+		if svc.WorkloadType != "deployment" {
+			t.Errorf("expected workload_type=deployment, got %s", svc.WorkloadType)
+		}
+	}
 }
 
 func TestFetchDeploymentsSkipsUnlabeled(t *testing.T) {
@@ -119,11 +179,97 @@ func TestFetchDeploymentsSkipsUnlabeled(t *testing.T) {
 	}
 }
 
+func TestFetchStatefulSets(t *testing.T) {
+	objects := []runtime.Object{
+		newFakeStatefulSet("postgres", "data", "15.0", 3, 3),
+		newFakeStatefulSet("redis", "data", "7.2", 3, 1),
+	}
+
+	cs := fake.NewSimpleClientset(objects...)
+	client := NewClientWith(cs)
+
+	services, summary, err := client.FetchDeployments(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(services) != 2 {
+		t.Fatalf("expected 2 services, got %d", len(services))
+	}
+	if summary.Healthy != 1 || summary.Degraded != 1 {
+		t.Errorf("expected healthy=1 degraded=1, got healthy=%d degraded=%d", summary.Healthy, summary.Degraded)
+	}
+
+	for _, svc := range services {
+		if svc.WorkloadType != "statefulset" {
+			t.Errorf("expected workload_type=statefulset, got %s", svc.WorkloadType)
+		}
+	}
+}
+
+func TestFetchDaemonSets(t *testing.T) {
+	objects := []runtime.Object{
+		newFakeDaemonSet("fluentd", "logging", "1.16", 5, 5),
+		newFakeDaemonSet("node-exporter", "monitoring", "1.7", 5, 3),
+	}
+
+	cs := fake.NewSimpleClientset(objects...)
+	client := NewClientWith(cs)
+
+	services, summary, err := client.FetchDeployments(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(services) != 2 {
+		t.Fatalf("expected 2 services, got %d", len(services))
+	}
+	if summary.Healthy != 1 || summary.Degraded != 1 {
+		t.Errorf("expected healthy=1 degraded=1, got healthy=%d degraded=%d", summary.Healthy, summary.Degraded)
+	}
+
+	for _, svc := range services {
+		if svc.WorkloadType != "daemonset" {
+			t.Errorf("expected workload_type=daemonset, got %s", svc.WorkloadType)
+		}
+	}
+}
+
+func TestFetchMixedWorkloads(t *testing.T) {
+	objects := []runtime.Object{
+		newFakeDeployment("api", "prod", "1.0.0", 3, 3),
+		newFakeStatefulSet("postgres", "prod", "15.0", 3, 3),
+		newFakeDaemonSet("fluentd", "logging", "1.16", 5, 5),
+	}
+
+	cs := fake.NewSimpleClientset(objects...)
+	client := NewClientWith(cs)
+
+	services, summary, err := client.FetchDeployments(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(services) != 3 {
+		t.Fatalf("expected 3 services, got %d", len(services))
+	}
+	if summary.Total != 3 || summary.Healthy != 3 {
+		t.Errorf("expected total=3 healthy=3, got total=%d healthy=%d", summary.Total, summary.Healthy)
+	}
+
+	types := map[string]bool{}
+	for _, svc := range services {
+		types[svc.WorkloadType] = true
+	}
+	if !types["deployment"] || !types["statefulset"] || !types["daemonset"] {
+		t.Errorf("expected all three workload types, got %v", types)
+	}
+}
+
 func TestCacheTTL(t *testing.T) {
 	cs := fake.NewSimpleClientset(newFakeDeployment("svc", "ns", "1.0", 1, 1))
 	client := NewClientWith(cs)
 
-	// First call populates cache
 	_, _, err := client.FetchDeployments(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -133,7 +279,6 @@ func TestCacheTTL(t *testing.T) {
 		t.Error("expected cache to be valid after fetch")
 	}
 
-	// Second call should use cache (same result)
 	s2, _, err := client.FetchDeployments(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -142,7 +287,6 @@ func TestCacheTTL(t *testing.T) {
 		t.Errorf("expected 1 cached service, got %d", len(s2))
 	}
 
-	// Expire cache manually
 	client.mu.Lock()
 	client.cacheExpiry = time.Now().Add(-1 * time.Second)
 	client.mu.Unlock()
@@ -168,4 +312,22 @@ func TestCacheConcurrency(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestComputeStatus(t *testing.T) {
+	tests := []struct {
+		ready, desired int32
+		want           string
+	}{
+		{3, 3, "green"},
+		{1, 3, "yellow"},
+		{0, 3, "red"},
+		{0, 0, "red"},
+	}
+	for _, tt := range tests {
+		got := computeStatus(tt.ready, tt.desired)
+		if got != tt.want {
+			t.Errorf("computeStatus(%d, %d) = %s, want %s", tt.ready, tt.desired, got, tt.want)
+		}
+	}
 }

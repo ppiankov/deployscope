@@ -136,6 +136,7 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 		"status":    query.Get("status"),
 		"name":      query.Get("name"),
 		"version":   query.Get("version"),
+		"type":      query.Get("type"),
 	}
 
 	filtered := filterServices(services, filters)
@@ -387,6 +388,12 @@ func filterServices(services []k8s.ServiceStatus, filters map[string]string) []k
 
 		if version, ok := filters["version"]; ok && version != "" {
 			if svc.Version != version {
+				match = false
+			}
+		}
+
+		if wType, ok := filters["type"]; ok && wType != "" {
+			if svc.WorkloadType != wType {
 				match = false
 			}
 		}
