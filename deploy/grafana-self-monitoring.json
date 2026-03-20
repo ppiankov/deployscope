@@ -1,0 +1,147 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
+  "title": "DeployScope — Self Monitoring",
+  "uid": "deployscope-self",
+  "version": 1,
+  "schemaVersion": 39,
+  "tags": ["deployscope", "kubernetes", "self-monitoring"],
+  "timezone": "browser",
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(deployscope_http_requests_total, instance)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Up",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "up{job=~\".*deployscope.*\"}", "legendFormat": "" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Request Rate (req/s)",
+      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(rate(deployscope_http_requests_total{instance=~\"$instance\"}[5m]))", "legendFormat": "req/s" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Error Rate",
+      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(rate(deployscope_http_requests_total{instance=~\"$instance\", status_code=~\"5..\"}[5m])) / sum(rate(deployscope_http_requests_total{instance=~\"$instance\"}[5m]))",
+          "legendFormat": "error %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Goroutines",
+      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "go_goroutines{job=~\".*deployscope.*\", instance=~\"$instance\"}", "legendFormat": "" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Memory (RSS)",
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "process_resident_memory_bytes{job=~\".*deployscope.*\", instance=~\"$instance\"}", "legendFormat": "" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Rate by Path",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum by (path) (rate(deployscope_http_requests_total{instance=~\"$instance\"}[5m]))", "legendFormat": "{{ path }}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Latency (p50 / p95 / p99)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(deployscope_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(deployscope_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(deployscope_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])))", "legendFormat": "p99" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Go Memory",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "go_memstats_heap_alloc_bytes{job=~\".*deployscope.*\", instance=~\"$instance\"}", "legendFormat": "Heap Alloc" },
+        { "expr": "go_memstats_heap_inuse_bytes{job=~\".*deployscope.*\", instance=~\"$instance\"}", "legendFormat": "Heap In-Use" },
+        { "expr": "process_resident_memory_bytes{job=~\".*deployscope.*\", instance=~\"$instance\"}", "legendFormat": "RSS" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Goroutines & GC",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "go_goroutines{job=~\".*deployscope.*\", instance=~\"$instance\"}", "legendFormat": "Goroutines" },
+        { "expr": "rate(go_gc_duration_seconds_sum{job=~\".*deployscope.*\", instance=~\"$instance\"}[5m])", "legendFormat": "GC Duration Rate" }
+      ]
+    }
+  ]
+}

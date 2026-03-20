@@ -1,0 +1,166 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
+  "title": "DeployScope — Deployment Health",
+  "uid": "deployscope-health",
+  "version": 1,
+  "schemaVersion": 39,
+  "tags": ["deployscope", "kubernetes"],
+  "timezone": "browser",
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "namespace",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(deployscope_workload_replicas, namespace)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2
+      },
+      {
+        "name": "workload_type",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(deployscope_workload_replicas, workload_type)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total Workloads",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(deployscope_workloads_total)",
+          "legendFormat": "Total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "thresholds": { "steps": [{ "color": "blue", "value": null }] } }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Healthy",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "deployscope_workloads_total{status=\"green\"}",
+          "legendFormat": "Healthy"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Degraded",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "deployscope_workloads_total{status=\"yellow\"}",
+          "legendFormat": "Degraded"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "thresholds": { "steps": [{ "color": "yellow", "value": null }] } }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Down",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "deployscope_workloads_total{status=\"red\"}",
+          "legendFormat": "Down"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "thresholds": { "steps": [{ "color": "red", "value": null }] } }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Workload Health Over Time",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "deployscope_workloads_total{status=\"green\"}", "legendFormat": "Healthy" },
+        { "expr": "deployscope_workloads_total{status=\"yellow\"}", "legendFormat": "Degraded" },
+        { "expr": "deployscope_workloads_total{status=\"red\"}", "legendFormat": "Down" }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Healthy" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Degraded" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Down" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "title": "All Workloads",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "deployscope_workload_replicas{namespace=~\"$namespace\", workload_type=~\"$workload_type\"}",
+          "legendFormat": "",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "deployscope_workload_ready_replicas{namespace=~\"$namespace\", workload_type=~\"$workload_type\"}",
+          "legendFormat": "",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "merge" },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true },
+            "renameByName": {
+              "namespace": "Namespace",
+              "name": "Name",
+              "workload_type": "Type",
+              "Value #A": "Desired",
+              "Value #B": "Ready"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
