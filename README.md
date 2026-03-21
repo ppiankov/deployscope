@@ -119,26 +119,40 @@ Via environment variables:
 ## Architecture
 
 ```
-Kubernetes API (read-only)
-       |
-       v
-+--------------+
-|  deployscope |
-|              |
-|  K8s client  |--> 30s cache
-|  HTTP server |--> REST API + HTML
-|              |
-+--------------+
-       |
-       v
-  Browser / Grafana / CI
+                    deployscope CLI
+                   /       |       \
+              serve     status    doctor
+                |          |        |
+                v          v        v
+         +---------------------------+
+         |       K8s client          |
+         |  Deployments              |
+         |  StatefulSets             |
+         |  DaemonSets               |
+         |  + annotation extraction  |
+         +---------------------------+
+              |              |
+         30s cache      deployscope.dev/*
+              |          annotations
+              v
+    +-------------------+
+    |   HTTP server     |
+    |                   |
+    |  REST API (/api/) |
+    |  HTML dashboard   |
+    |  /metrics (prom)  |
+    |  /health /ready   |
+    +-------------------+
+              |
+              v
+  Browser / Grafana / Agents
 ```
 
 Cluster requirements:
 - Kubernetes >= 1.23
-- RBAC: read-only access to deployments and namespaces (see `deploy/rbac.yaml`)
+- RBAC: read-only access to deployments, statefulsets, daemonsets, namespaces (see `deploy/rbac.yaml`)
 
-Only deployments with label `app.kubernetes.io/version` are monitored.
+Only workloads with label `app.kubernetes.io/version` are monitored.
 
 ## Agent-native interface
 

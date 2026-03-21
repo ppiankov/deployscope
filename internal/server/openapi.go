@@ -12,7 +12,7 @@ func getOpenAPISpec(r *http.Request) map[string]interface{} {
 		"openapi": "3.0.0",
 		"info": map[string]interface{}{
 			"title":       "DeployScope API",
-			"description": "RESTful API for monitoring Kubernetes deployment statuses",
+			"description": "RESTful API for monitoring Kubernetes workload statuses (Deployments, StatefulSets, DaemonSets)",
 			"version":     APIVersion,
 		},
 		"servers": []map[string]interface{}{
@@ -21,8 +21,8 @@ func getOpenAPISpec(r *http.Request) map[string]interface{} {
 		"paths": map[string]interface{}{
 			"/services": map[string]interface{}{
 				"get": map[string]interface{}{
-					"summary":     "List all services",
-					"description": "List all services with pagination, filtering, and sorting",
+					"summary":     "List all workloads",
+					"description": "List all workloads with pagination, filtering, and sorting",
 					"parameters": []map[string]interface{}{
 						{
 							"name": "page", "in": "query",
@@ -55,6 +55,11 @@ func getOpenAPISpec(r *http.Request) map[string]interface{} {
 							"schema":      map[string]string{"type": "string"},
 						},
 						{
+							"name": "type", "in": "query",
+							"description": "Filter by workload type",
+							"schema":      map[string]interface{}{"type": "string", "enum": []string{"deployment", "statefulset", "daemonset"}},
+						},
+						{
 							"name": "sort", "in": "query",
 							"description": "Sort field (name, namespace, version, status, replicas). Prefix '-' for desc",
 							"schema":      map[string]interface{}{"type": "string", "example": "-name"},
@@ -74,30 +79,30 @@ func getOpenAPISpec(r *http.Request) map[string]interface{} {
 			},
 			"/services/{namespace}/{name}": map[string]interface{}{
 				"get": map[string]interface{}{
-					"summary":     "Get service by ID",
-					"description": "Get details for a specific service",
+					"summary":     "Get workload by ID",
+					"description": "Get details for a specific workload",
 					"parameters": []map[string]interface{}{
 						{
 							"name": "namespace", "in": "path", "required": true,
-							"description": "Service namespace",
+							"description": "Workload namespace",
 							"schema":      map[string]string{"type": "string"},
 						},
 						{
 							"name": "name", "in": "path", "required": true,
-							"description": "Service name",
+							"description": "Workload name",
 							"schema":      map[string]string{"type": "string"},
 						},
 					},
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{"description": "Successful response"},
-						"404": map[string]interface{}{"description": "Service not found"},
+						"404": map[string]interface{}{"description": "Workload not found"},
 					},
 				},
 			},
 			"/summary": map[string]interface{}{
 				"get": map[string]interface{}{
 					"summary":     "Get summary statistics",
-					"description": "Get aggregate statistics for all services",
+					"description": "Get aggregate statistics for all workloads",
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{"description": "Successful response"},
 					},
@@ -106,7 +111,7 @@ func getOpenAPISpec(r *http.Request) map[string]interface{} {
 			"/namespaces": map[string]interface{}{
 				"get": map[string]interface{}{
 					"summary":     "List all namespaces",
-					"description": "List all namespaces with service counts",
+					"description": "List all namespaces with workload counts",
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{"description": "Successful response"},
 					},
@@ -118,16 +123,38 @@ func getOpenAPISpec(r *http.Request) map[string]interface{} {
 				"ServiceStatus": map[string]interface{}{
 					"type": "object",
 					"properties": map[string]interface{}{
-						"id":             map[string]string{"type": "string", "example": "production/my-service"},
-						"name":           map[string]string{"type": "string"},
-						"namespace":      map[string]string{"type": "string"},
-						"version":        map[string]string{"type": "string"},
-						"image":          map[string]string{"type": "string"},
-						"replicas":       map[string]string{"type": "integer"},
-						"ready_replicas": map[string]string{"type": "integer"},
-						"status":         map[string]interface{}{"type": "string", "enum": []string{"green", "yellow", "red"}},
-						"created_at":     map[string]string{"type": "string", "format": "date-time"},
-						"updated_at":     map[string]string{"type": "string", "format": "date-time"},
+						"id":              map[string]string{"type": "string", "example": "production/my-service"},
+						"name":            map[string]string{"type": "string"},
+						"namespace":       map[string]string{"type": "string"},
+						"workload_type":   map[string]interface{}{"type": "string", "enum": []string{"deployment", "statefulset", "daemonset"}},
+						"version":         map[string]string{"type": "string"},
+						"image":           map[string]string{"type": "string"},
+						"replicas":        map[string]string{"type": "integer"},
+						"ready_replicas":  map[string]string{"type": "integer"},
+						"status":          map[string]interface{}{"type": "string", "enum": []string{"green", "yellow", "red"}},
+						"owner":           map[string]interface{}{"type": "string", "nullable": true, "description": "From deployscope.dev/owner annotation"},
+						"tier":            map[string]interface{}{"type": "string", "nullable": true, "description": "From deployscope.dev/tier annotation (critical, standard, best-effort)"},
+						"managed_by":      map[string]interface{}{"type": "string", "nullable": true, "description": "From app.kubernetes.io/managed-by label"},
+						"part_of":         map[string]interface{}{"type": "string", "nullable": true, "description": "From app.kubernetes.io/part-of label"},
+						"depends_on":      map[string]interface{}{"type": "array", "items": map[string]string{"type": "string"}, "description": "From deployscope.dev/depends-on annotation"},
+						"integration":     map[string]string{"$ref": "#/components/schemas/Integration"},
+						"last_transition": map[string]interface{}{"type": "string", "format": "date-time", "nullable": true, "description": "Most recent K8s condition transition"},
+						"created_at":      map[string]string{"type": "string", "format": "date-time"},
+						"updated_at":      map[string]string{"type": "string", "format": "date-time"},
+					},
+				},
+				"Integration": map[string]interface{}{
+					"type":        "object",
+					"description": "Integration pointers from deployscope.dev/* annotations",
+					"properties": map[string]interface{}{
+						"gitops_repo":        map[string]interface{}{"type": "string", "nullable": true},
+						"gitops_path":        map[string]interface{}{"type": "string", "nullable": true},
+						"oncall":             map[string]interface{}{"type": "string", "nullable": true},
+						"runbook":            map[string]interface{}{"type": "string", "nullable": true},
+						"dashboard":          map[string]interface{}{"type": "string", "nullable": true},
+						"health_endpoint":    map[string]interface{}{"type": "string", "nullable": true},
+						"deep_health":        map[string]interface{}{"type": "string", "nullable": true},
+						"deep_health_detail": map[string]interface{}{"type": "string", "nullable": true},
 					},
 				},
 				"PaginatedResponse": map[string]interface{}{
