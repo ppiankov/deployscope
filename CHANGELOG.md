@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 - **`--unhealthy` filter** — status command can show only degraded/down workloads
 - **`--redact` flag** — scrubs sensitive values from annotation output
 - **`last_transition` timestamp** — per-workload transition time from K8s conditions
-- **SKILL.md** — ANCC-compliant agent discovery spec in docs/
+- **SKILL.md** — ANCC-compliant agent interface contract in docs/
 - **GHCR Docker image** — multi-arch (linux/amd64, linux/arm64) published on tag push
 
 ### Changed
