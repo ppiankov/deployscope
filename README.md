@@ -14,9 +14,10 @@ DeployScope is a read-only service that monitors all deployments in a Kubernetes
 
 ## What it is NOT
 
-- Not a replacement for Prometheus/Grafana — shows current state, not history
-- Not an alerting system — display only
+- Not an alerting system — display only, no notifications
 - Not a multi-cluster solution — works within a single cluster
+- Not a diagnostic tool — use [kubenow](https://github.com/ppiankov/kubenow) for OOM, CrashLoop, events
+- Not a CMDB — mirrors K8s annotations, never invents data
 - No database required — everything in memory
 
 ## Philosophy
@@ -148,10 +149,10 @@ DeployScope is becoming the cognitive layer for autonomous Kubernetes operations
 
 ## Known limitations
 
-- Deployments only — StatefulSets and DaemonSets support planned ([WO-5](docs/agent-native.md#scope-all-workloads-that-matter))
 - Single cluster only — cluster discovery is a separate tool
 - In-memory cache (data refreshes on restart)
 - No API authentication
+- No Jobs/CronJobs (ephemeral workloads with different lifecycle)
 
 ## License
 

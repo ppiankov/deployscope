@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ppiankov/deployscope/internal/k8s"
 )
+
+var sensitivePattern = regexp.MustCompile(`(?i)(token|secret|key|password|credential|bearer|apikey|api_key)`)
+var urlWithAuthPattern = regexp.MustCompile(`://[^@/]+:[^@/]+@`)
 
 // StatusOutput is the structured JSON output for status command.
 type StatusOutput struct {
@@ -29,11 +33,16 @@ type RoutingAdvice struct {
 func newStatusCmd() *cobra.Command {
 	var format string
 	var unhealthy bool
+	var redact bool
 
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show workload health status (one-shot, exits)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if os.Getenv("DEPLOYSCOPE_REDACT") == "true" {
+				redact = true
+			}
+
 			k8sClient, err := k8s.NewClient()
 			if err != nil {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
@@ -52,6 +61,12 @@ func newStatusCmd() *cobra.Command {
 					}
 				}
 				services = filtered
+			}
+
+			if redact {
+				for i := range services {
+					redactService(&services[i])
+				}
 			}
 
 			routing := computeRouting(services, summary)
@@ -79,6 +94,7 @@ func newStatusCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&format, "format", "table", "Output format: table, json")
 	cmd.Flags().BoolVar(&unhealthy, "unhealthy", false, "Show only degraded/down workloads")
+	cmd.Flags().BoolVar(&redact, "redact", false, "Scrub potentially sensitive values from annotations (or set DEPLOYSCOPE_REDACT=true)")
 
 	return cmd
 }
@@ -176,4 +192,29 @@ func printStatusTable(services []k8s.ServiceStatus, summary k8s.Summary, routing
 			svc.ReadyReplicas, svc.Replicas, svc.Version, owner, tier)
 	}
 	_ = w.Flush()
+}
+
+func redactService(svc *k8s.ServiceStatus) {
+	svc.Integration.Runbook = redactPtr(svc.Integration.Runbook)
+	svc.Integration.Dashboard = redactPtr(svc.Integration.Dashboard)
+	svc.Integration.HealthURL = redactPtr(svc.Integration.HealthURL)
+	svc.Integration.DeepDetail = redactPtr(svc.Integration.DeepDetail)
+}
+
+func redactPtr(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := redactValue(*s)
+	return &v
+}
+
+func redactValue(s string) string {
+	if urlWithAuthPattern.MatchString(s) {
+		return urlWithAuthPattern.ReplaceAllString(s, "://***:***@")
+	}
+	if sensitivePattern.MatchString(s) {
+		return "[REDACTED]"
+	}
+	return s
 }

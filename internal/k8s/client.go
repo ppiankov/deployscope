@@ -30,24 +30,25 @@ type Integration struct {
 
 // ServiceStatus represents a single Kubernetes workload's status.
 type ServiceStatus struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name"`
-	Namespace     string            `json:"namespace"`
-	WorkloadType  string            `json:"workload_type"`
-	Version       string            `json:"version"`
-	Image         string            `json:"image"`
-	Replicas      int32             `json:"replicas"`
-	ReadyReplicas int32             `json:"ready_replicas"`
-	Status        string            `json:"status"`
-	Labels        map[string]string `json:"labels,omitempty"`
-	Owner         *string           `json:"owner"`
-	Tier          *string           `json:"tier"`
-	ManagedBy     *string           `json:"managed_by"`
-	PartOf        *string           `json:"part_of"`
-	DependsOn     []string          `json:"depends_on"`
-	Integration   Integration       `json:"integration"`
-	CreatedAt     time.Time         `json:"created_at"`
-	UpdatedAt     time.Time         `json:"updated_at"`
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	Namespace      string            `json:"namespace"`
+	WorkloadType   string            `json:"workload_type"`
+	Version        string            `json:"version"`
+	Image          string            `json:"image"`
+	Replicas       int32             `json:"replicas"`
+	ReadyReplicas  int32             `json:"ready_replicas"`
+	Status         string            `json:"status"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	Owner          *string           `json:"owner"`
+	Tier           *string           `json:"tier"`
+	ManagedBy      *string           `json:"managed_by"`
+	PartOf         *string           `json:"part_of"`
+	DependsOn      []string          `json:"depends_on"`
+	Integration    Integration       `json:"integration"`
+	LastTransition *time.Time        `json:"last_transition"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
 }
 
 // Summary contains aggregate statistics.
@@ -138,25 +139,31 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 		status := computeStatus(ready, desired)
 		addToSummary(&summary, status)
 
+		var condTimes []time.Time
+		for _, cond := range dep.Status.Conditions {
+			condTimes = append(condTimes, cond.LastTransitionTime.Time)
+		}
+
 		services = append(services, ServiceStatus{
-			ID:            fmt.Sprintf("%s/%s", dep.Namespace, dep.Name),
-			Name:          dep.Name,
-			Namespace:     dep.Namespace,
-			WorkloadType:  "deployment",
-			Version:       version,
-			Image:         image,
-			Replicas:      desired,
-			ReadyReplicas: ready,
-			Status:        status,
-			Labels:        dep.Spec.Template.Labels,
-			Owner:         owner,
-			Tier:          tier,
-			ManagedBy:     managedBy,
-			PartOf:        partOf,
-			DependsOn:     dependsOn,
-			Integration:   integration,
-			CreatedAt:     dep.CreationTimestamp.Time,
-			UpdatedAt:     time.Now(),
+			ID:             fmt.Sprintf("%s/%s", dep.Namespace, dep.Name),
+			Name:           dep.Name,
+			Namespace:      dep.Namespace,
+			WorkloadType:   "deployment",
+			Version:        version,
+			Image:          image,
+			Replicas:       desired,
+			ReadyReplicas:  ready,
+			Status:         status,
+			Labels:         dep.Spec.Template.Labels,
+			Owner:          owner,
+			Tier:           tier,
+			ManagedBy:      managedBy,
+			PartOf:         partOf,
+			DependsOn:      dependsOn,
+			Integration:    integration,
+			LastTransition: lastConditionTransition(condTimes),
+			CreatedAt:      dep.CreationTimestamp.Time,
+			UpdatedAt:      time.Now(),
 		})
 	}
 
@@ -191,25 +198,31 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 			status := computeStatus(ready, desired)
 			addToSummary(&summary, status)
 
+			var ssTimes []time.Time
+			for _, cond := range ss.Status.Conditions {
+				ssTimes = append(ssTimes, cond.LastTransitionTime.Time)
+			}
+
 			services = append(services, ServiceStatus{
-				ID:            fmt.Sprintf("%s/%s", ss.Namespace, ss.Name),
-				Name:          ss.Name,
-				Namespace:     ss.Namespace,
-				WorkloadType:  "statefulset",
-				Version:       version,
-				Image:         image,
-				Replicas:      desired,
-				ReadyReplicas: ready,
-				Status:        status,
-				Labels:        ss.Spec.Template.Labels,
-				Owner:         owner,
-				Tier:          tier,
-				ManagedBy:     managedBy,
-				PartOf:        partOf,
-				DependsOn:     dependsOn,
-				Integration:   integration,
-				CreatedAt:     ss.CreationTimestamp.Time,
-				UpdatedAt:     time.Now(),
+				ID:             fmt.Sprintf("%s/%s", ss.Namespace, ss.Name),
+				Name:           ss.Name,
+				Namespace:      ss.Namespace,
+				WorkloadType:   "statefulset",
+				Version:        version,
+				Image:          image,
+				Replicas:       desired,
+				ReadyReplicas:  ready,
+				Status:         status,
+				Labels:         ss.Spec.Template.Labels,
+				Owner:          owner,
+				Tier:           tier,
+				ManagedBy:      managedBy,
+				PartOf:         partOf,
+				DependsOn:      dependsOn,
+				Integration:    integration,
+				LastTransition: lastConditionTransition(ssTimes),
+				CreatedAt:      ss.CreationTimestamp.Time,
+				UpdatedAt:      time.Now(),
 			})
 		}
 	}
@@ -242,25 +255,31 @@ func (c *Client) FetchDeployments(ctx context.Context) ([]ServiceStatus, Summary
 			status := computeStatus(ready, desired)
 			addToSummary(&summary, status)
 
+			var dsTimes []time.Time
+			for _, cond := range ds.Status.Conditions {
+				dsTimes = append(dsTimes, cond.LastTransitionTime.Time)
+			}
+
 			services = append(services, ServiceStatus{
-				ID:            fmt.Sprintf("%s/%s", ds.Namespace, ds.Name),
-				Name:          ds.Name,
-				Namespace:     ds.Namespace,
-				WorkloadType:  "daemonset",
-				Version:       version,
-				Image:         image,
-				Replicas:      desired,
-				ReadyReplicas: ready,
-				Status:        status,
-				Labels:        ds.Spec.Template.Labels,
-				Owner:         owner,
-				Tier:          tier,
-				ManagedBy:     managedBy,
-				PartOf:        partOf,
-				DependsOn:     dependsOn,
-				Integration:   integration,
-				CreatedAt:     ds.CreationTimestamp.Time,
-				UpdatedAt:     time.Now(),
+				ID:             fmt.Sprintf("%s/%s", ds.Namespace, ds.Name),
+				Name:           ds.Name,
+				Namespace:      ds.Namespace,
+				WorkloadType:   "daemonset",
+				Version:        version,
+				Image:          image,
+				Replicas:       desired,
+				ReadyReplicas:  ready,
+				Status:         status,
+				Labels:         ds.Spec.Template.Labels,
+				Owner:          owner,
+				Tier:           tier,
+				ManagedBy:      managedBy,
+				PartOf:         partOf,
+				DependsOn:      dependsOn,
+				Integration:    integration,
+				LastTransition: lastConditionTransition(dsTimes),
+				CreatedAt:      ds.CreationTimestamp.Time,
+				UpdatedAt:      time.Now(),
 			})
 		}
 	}
@@ -302,6 +321,20 @@ func addToSummary(summary *Summary, status string) {
 	case "red":
 		summary.Down++
 	}
+}
+
+// lastConditionTransition returns the most recent condition transition time.
+func lastConditionTransition(times []time.Time) *time.Time {
+	if len(times) == 0 {
+		return nil
+	}
+	latest := times[0]
+	for _, t := range times[1:] {
+		if t.After(latest) {
+			latest = t
+		}
+	}
+	return &latest
 }
 
 const annotationPrefix = "deployscope.dev/"
